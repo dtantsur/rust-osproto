@@ -47,7 +47,6 @@
     legacy_directory_ownership,
     missing_copy_implementations,
     missing_debug_implementations,
-    missing_docs,
     non_shorthand_field_patterns,
     no_mangle_generic_items,
     overflowing_literals,
@@ -71,3 +70,7 @@
     unused_results,
     while_true
 )]
+#![allow(missing_docs)]
+
+pub mod common;
+pub mod identity;
