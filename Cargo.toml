@@ -1,0 +1,27 @@
+[package]
+
+name = "osproto"
+description = "Protocol structures for OpenStack API"
+version = "0.0.0"
+authors = ["Dmitry Tantsur <divius.inside@gmail.com>"]
+homepage = "https://github.com/dtantsur/rust-osproto"
+repository = "https://github.com/dtantsur/rust-osproto"
+documentation = "https://docs.rs/osproto"
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["api", "cloud", "openstack"]
+categories = ["api-bindings"]
+edition = "2018"
+
+[dependencies]
+
+chrono = { version = "^0.4", features = ["serde"] }
+serde = { version = "^1.0", features = ["derive"] }
+
+[lib]
+
+name = "osproto"
+path = "src/lib.rs"
+
+[badges]
+travis-ci = { repository = "dtantsur/rust-osproto" }
