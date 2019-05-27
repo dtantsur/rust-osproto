@@ -15,59 +15,78 @@
 //! Identity V3 JSON structures and protocol bits.
 
 use chrono::{DateTime, FixedOffset};
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
 
 use super::common::IdAndName;
 
-/// Domain request.
+/// A reference to a resource by its ID or name.
 #[derive(Clone, Debug, Serialize)]
-pub struct Domain {
-    pub name: String,
+pub enum IdOrName {
+    /// Resource ID.
+    #[serde(rename = "id")]
+    Id(String),
+    /// Resource name.
+    #[serde(rename = "name")]
+    Name(String),
 }
 
 /// User and password.
 #[derive(Clone, Debug, Serialize)]
 pub struct UserAndPassword {
-    pub name: String,
+    #[serde(flatten)]
+    pub user: IdOrName,
     pub password: String,
-    pub domain: Domain,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub domain: Option<IdOrName>,
 }
 
-/// Password authentication
-#[derive(Clone, Debug, Serialize)]
-pub struct PasswordAuth {
-    pub user: UserAndPassword,
+/// Authentication identity.
+#[derive(Clone, Debug)]
+pub enum Identity {
+    /// Authentication with a user and a password.
+    Password(UserAndPassword),
+    /// Authentication with a token.
+    Token(IdOrName),
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct PasswordIdentity {
-    pub methods: Vec<String>,
-    pub password: PasswordAuth,
-}
-
+/// A reference to a project in a domain.
 #[derive(Clone, Debug, Serialize)]
 pub struct Project {
-    pub name: String,
-    pub domain: Domain,
+    #[serde(flatten)]
+    pub project: IdOrName,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub domain: Option<IdOrName>,
 }
 
+/// A scope.
 #[derive(Clone, Debug, Serialize)]
-pub struct ProjectScope {
-    pub project: Project,
+pub enum Scope {
+    /// Project scope.
+    #[serde(rename = "project")]
+    Project(Project),
+    /// Domain scope.
+    #[serde(rename = "domain")]
+    Domain(IdOrName),
 }
 
+/// An authentication object.
 #[derive(Clone, Debug, Serialize)]
-pub struct ProjectScopedAuth {
-    pub identity: PasswordIdentity,
+pub struct Auth {
+    /// Authentication identity.
+    pub identity: Identity,
+    /// Authentication scope (if needed).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scope: Option<ProjectScope>,
+    pub scope: Option<Scope>,
 }
 
+/// An authentication request root.
 #[derive(Clone, Debug, Serialize)]
-pub struct ProjectScopedAuthRoot {
-    pub auth: ProjectScopedAuth,
+pub struct AuthRoot {
+    pub auth: Auth,
 }
 
+/// An endpoint in the catalog.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Endpoint {
     pub interface: String,
@@ -75,6 +94,7 @@ pub struct Endpoint {
     pub url: String,
 }
 
+/// A service catalog record.
 #[derive(Clone, Debug, Deserialize)]
 pub struct CatalogRecord {
     #[serde(rename = "type")]
@@ -82,11 +102,13 @@ pub struct CatalogRecord {
     pub endpoints: Vec<Endpoint>,
 }
 
+/// A root catalog response.
 #[derive(Clone, Debug, Deserialize)]
 pub struct CatalogRoot {
     pub catalog: Vec<CatalogRecord>,
 }
 
+/// An authentication token with embedded catalog.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Token {
     pub roles: Vec<IdAndName>,
@@ -94,67 +116,38 @@ pub struct Token {
     pub catalog: Vec<CatalogRecord>,
 }
 
-#[derive(Debug, Deserialize)]
+/// A token response root.
+#[derive(Clone, Debug, Deserialize)]
 pub struct TokenRoot {
     pub token: Token,
 }
 
-const PASSWORD_METHOD: &str = "password";
-
-impl PasswordAuth {
-    fn new<S1, S2, S3>(user_name: S1, password: S2, domain_name: S3) -> PasswordAuth
-    where
-        S1: Into<String>,
-        S2: Into<String>,
-        S3: Into<String>,
-    {
-        PasswordAuth {
-            user: UserAndPassword {
-                name: user_name.into(),
-                password: password.into(),
-                domain: Domain {
-                    name: domain_name.into(),
-                },
-            },
-        }
-    }
+#[derive(Debug, Serialize)]
+struct PasswordAuth<'a> {
+    user: &'a UserAndPassword,
 }
 
-impl PasswordIdentity {
-    pub fn new<S1, S2, S3>(user_name: S1, password: S2, domain_name: S3) -> PasswordIdentity
-    where
-        S1: Into<String>,
-        S2: Into<String>,
-        S3: Into<String>,
-    {
-        PasswordIdentity {
-            methods: vec![String::from(PASSWORD_METHOD)],
-            password: PasswordAuth::new(user_name, password, domain_name),
-        }
-    }
+#[derive(Debug, Serialize)]
+struct TokenAuth<'a> {
+    token: &'a IdOrName,
 }
 
-impl ProjectScope {
-    pub fn new<S1, S2>(project_name: S1, domain_name: S2) -> ProjectScope
+impl Serialize for Identity {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S1: Into<String>,
-        S2: Into<String>,
+        S: Serializer,
     {
-        ProjectScope {
-            project: Project {
-                name: project_name.into(),
-                domain: Domain {
-                    name: domain_name.into(),
-                },
-            },
+        let mut inner = serializer.serialize_struct("Identity", 2)?;
+        match self {
+            Identity::Password(ref user) => {
+                inner.serialize_field("methods", &["password"])?;
+                inner.serialize_field("password", &PasswordAuth { user })?;
+            }
+            Identity::Token(ref token) => {
+                inner.serialize_field("methods", &["token"])?;
+                inner.serialize_field("token", &TokenAuth { token })?;
+            }
         }
-    }
-}
-
-impl ProjectScopedAuthRoot {
-    pub fn new(identity: PasswordIdentity, scope: Option<ProjectScope>) -> ProjectScopedAuthRoot {
-        ProjectScopedAuthRoot {
-            auth: ProjectScopedAuth { identity, scope },
-        }
+        inner.end()
     }
 }
