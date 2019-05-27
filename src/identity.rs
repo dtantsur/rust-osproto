@@ -68,6 +68,8 @@ pub enum Scope {
     /// Domain scope.
     #[serde(rename = "domain")]
     Domain(IdOrName),
+    #[serde(rename = "system", serialize_with = "ser_system_scope")]
+    System,
 }
 
 /// An authentication object.
@@ -149,5 +151,136 @@ impl Serialize for Identity {
             }
         }
         inner.end()
+    }
+}
+
+fn ser_system_scope<S>(serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut inner = serializer.serialize_struct("System", 1)?;
+    inner.serialize_field("all", &true)?;
+    inner.end()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use serde_json;
+
+    const PASSWORD_NAME_UNSCOPED: &str = r#"
+{
+    "auth": {
+        "identity": {
+            "methods": [
+                "password"
+            ],
+            "password": {
+                "user": {
+                    "name": "admin",
+                    "domain": {
+                        "name": "Default"
+                    },
+                    "password": "devstacker"
+                }
+            }
+        }
+    }
+}"#;
+
+    const PASSWORD_ID_SCOPED_WITH_ID: &str = r#"
+{
+    "auth": {
+        "identity": {
+            "methods": [
+                "password"
+            ],
+            "password": {
+                "user": {
+                    "id": "ee4dfb6e5540447cb3741905149d9b6e",
+                    "password": "devstacker"
+                }
+            }
+        },
+        "scope": {
+            "domain": {
+                "id": "default"
+            }
+        }
+    }
+}"#;
+
+    const PASSWORD_ID_SYSTEM_SCOPE: &str = r#"
+{
+    "auth": {
+        "identity": {
+            "methods": [
+                "password"
+            ],
+            "password": {
+                "user": {
+                    "id": "ee4dfb6e5540447cb3741905149d9b6e",
+                    "password": "devstacker"
+                }
+            }
+        },
+        "scope": {
+            "system": {
+                "all": true
+            }
+        }
+    }
+}"#;
+
+    #[test]
+    fn test_password_name_unscoped() {
+        let sample: serde_json::Value = serde_json::from_str(PASSWORD_NAME_UNSCOPED).unwrap();
+        let value = AuthRoot {
+            auth: Auth {
+                identity: Identity::Password(UserAndPassword {
+                    user: IdOrName::Name("admin".to_string()),
+                    password: "devstacker".to_string(),
+                    domain: Some(IdOrName::Name("Default".to_string())),
+                }),
+                scope: None,
+            },
+        };
+        let result = serde_json::to_value(value).unwrap();
+        assert_eq!(result, sample);
+    }
+
+    #[test]
+    fn test_password_id_scoped_with_id() {
+        let sample: serde_json::Value = serde_json::from_str(PASSWORD_ID_SCOPED_WITH_ID).unwrap();
+        let value = AuthRoot {
+            auth: Auth {
+                identity: Identity::Password(UserAndPassword {
+                    user: IdOrName::Id("ee4dfb6e5540447cb3741905149d9b6e".to_string()),
+                    password: "devstacker".to_string(),
+                    domain: None,
+                }),
+                scope: Some(Scope::Domain(IdOrName::Id("default".to_string()))),
+            },
+        };
+        let result = serde_json::to_value(value).unwrap();
+        assert_eq!(result, sample);
+    }
+
+    #[test]
+    fn test_password_id_system_scope() {
+        let sample: serde_json::Value = serde_json::from_str(PASSWORD_ID_SYSTEM_SCOPE).unwrap();
+        let value = AuthRoot {
+            auth: Auth {
+                identity: Identity::Password(UserAndPassword {
+                    user: IdOrName::Id("ee4dfb6e5540447cb3741905149d9b6e".to_string()),
+                    password: "devstacker".to_string(),
+                    domain: None,
+                }),
+                scope: Some(Scope::System),
+            },
+        };
+        let result = serde_json::to_value(value).unwrap();
+        assert_eq!(result, sample);
     }
 }
