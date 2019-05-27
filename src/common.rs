@@ -19,7 +19,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use reqwest::Url;
-use serde::de::{DeserializeOwned, Error as DeserError};
+use serde::de::Error as DeserError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A link to a resource.
@@ -48,11 +48,11 @@ pub struct Version {
     pub id: XdotY<u16>,
     #[serde(default)]
     pub links: Vec<Link>,
-    #[serde(deserialize_with = "empty_as_none", default)]
+    #[serde(deserialize_with = "empty_as_default", default)]
     pub status: Option<String>,
-    #[serde(deserialize_with = "empty_as_none", default)]
+    #[serde(deserialize_with = "empty_as_default", default)]
     pub version: Option<XdotY<u16>>,
-    #[serde(deserialize_with = "empty_as_none", default)]
+    #[serde(deserialize_with = "empty_as_default", default)]
     pub min_version: Option<XdotY<u16>>,
 }
 
@@ -97,13 +97,6 @@ pub enum Root {
     MultipleVersions { versions: Vec<Version> },
     /// Single major version.
     OneVersion { version: Version },
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ValueOrString<T> {
-    Value(T),
-    String(String),
 }
 
 impl<T> fmt::Display for XdotY<T>
@@ -175,7 +168,7 @@ where
     }
 }
 
-fn deser_version<'de, D, T>(des: D) -> ::std::result::Result<XdotY<T>, D::Error>
+fn deser_version<'de, D, T>(des: D) -> Result<XdotY<T>, D::Error>
 where
     D: Deserializer<'de>,
     T: FromStr + Default,
@@ -195,27 +188,33 @@ where
     XdotY::from_str(version_part).map_err(D::Error::custom)
 }
 
-/// Deserialize value where empty string equals None.
-pub fn empty_as_none<'de, D, T>(des: D) -> ::std::result::Result<Option<T>, D::Error>
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ValueOrString<'s, T> {
+    Value(T),
+    String(&'s str),
+}
+
+/// Deserialize a value where empty string is replaced by `Default` value.
+pub fn empty_as_default<'de, D, T>(des: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
-    T: DeserializeOwned,
+    T: Deserialize<'de> + Default,
 {
-    let value = ValueOrString::deserialize(des)?;
-    match value {
-        ValueOrString::Value(val) => Ok(Some(val)),
+    match ValueOrString::deserialize(des)? {
+        ValueOrString::Value(val) => Ok(val),
         ValueOrString::String(val) => {
             if val == "" {
-                Ok(None)
+                Ok(T::default())
             } else {
-                Err(DeserError::custom("Unexpected string"))
+                Err(DeserError::custom("Unexpected non-empty string"))
             }
         }
     }
 }
 
 /// Deserialize a URL.
-pub fn deser_url<'de, D>(des: D) -> ::std::result::Result<Url, D::Error>
+pub fn deser_url<'de, D>(des: D) -> Result<Url, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -230,14 +229,19 @@ mod test {
     use serde::Deserialize;
     use serde_json;
 
-    use super::{deser_url, empty_as_none, XdotY};
+    use super::{deser_url, empty_as_default, XdotY};
 
     #[derive(Debug, Deserialize)]
-    struct EmptyAsNone {
-        #[serde(deserialize_with = "empty_as_none")]
-        number: Option<u8>,
-        #[serde(deserialize_with = "empty_as_none")]
-        vec: Option<Vec<String>>,
+    struct Custom(bool);
+
+    #[derive(Debug, Deserialize)]
+    struct EmptyAsDefault {
+        #[serde(deserialize_with = "empty_as_default")]
+        number: u8,
+        #[serde(deserialize_with = "empty_as_default")]
+        vec: Vec<String>,
+        #[serde(deserialize_with = "empty_as_default")]
+        opt: Option<Custom>,
     }
 
     #[derive(Debug, Deserialize)]
@@ -247,19 +251,21 @@ mod test {
     }
 
     #[test]
-    fn test_empty_as_none_with_values() {
-        let s = "{\"number\": 42, \"vec\": [\"value\"]}";
-        let r: EmptyAsNone = serde_json::from_str(s).unwrap();
-        assert_eq!(r.number.unwrap(), 42);
-        assert_eq!(r.vec.unwrap(), vec!["value".to_string()]);
+    fn test_empty_as_default_with_values() {
+        let s = "{\"number\": 42, \"vec\": [\"value\"], \"opt\": true}";
+        let r: EmptyAsDefault = serde_json::from_str(s).unwrap();
+        assert_eq!(r.number, 42);
+        assert_eq!(r.vec, vec!["value".to_string()]);
+        assert!(r.opt.unwrap().0);
     }
 
     #[test]
-    fn test_empty_as_none_with_empty_string() {
-        let s = "{\"number\": \"\", \"vec\": \"\"}";
-        let r: EmptyAsNone = serde_json::from_str(s).unwrap();
-        assert!(r.number.is_none());
-        assert!(r.vec.is_none());
+    fn test_empty_as_default_with_empty_string() {
+        let s = "{\"number\": \"\", \"vec\": \"\", \"opt\": \"\"}";
+        let r: EmptyAsDefault = serde_json::from_str(s).unwrap();
+        assert_eq!(r.number, 0);
+        assert!(r.vec.is_empty());
+        assert!(r.opt.is_none());
     }
 
     #[test]
