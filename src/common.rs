@@ -229,7 +229,7 @@ mod test {
     use serde::Deserialize;
     use serde_json;
 
-    use super::{deser_url, empty_as_default, XdotY};
+    use super::{deser_url, empty_as_default, Version, XdotY};
 
     #[derive(Debug, Deserialize)]
     struct Custom(bool);
@@ -316,5 +316,65 @@ mod test {
         let xy: XdotY<u8> = serde_json::from_str("\"2.27\"").unwrap();
         assert_eq!(xy.0, 2);
         assert_eq!(xy.1, 27);
+    }
+
+    #[test]
+    fn test_version_current_is_stable() {
+        let stable = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("CURRENT".to_string()),
+            version: None,
+            min_version: None,
+        };
+        assert!(stable.is_stable());
+    }
+
+    #[test]
+    fn test_version_stable_is_stable() {
+        let stable = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("Stable".to_string()),
+            version: None,
+            min_version: None,
+        };
+        assert!(stable.is_stable());
+    }
+
+    #[test]
+    fn test_version_supported_is_stable() {
+        let stable = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("supported".to_string()),
+            version: None,
+            min_version: None,
+        };
+        assert!(stable.is_stable());
+    }
+
+    #[test]
+    fn test_version_no_status_is_stable() {
+        let stable = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: None,
+            version: None,
+            min_version: None,
+        };
+        assert!(stable.is_stable());
+    }
+
+    #[test]
+    fn test_version_deprecated_is_not_stable() {
+        let unstable = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("DEPRECATED".to_string()),
+            version: None,
+            min_version: None,
+        };
+        assert!(!unstable.is_stable());
     }
 }
