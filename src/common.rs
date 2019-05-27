@@ -16,7 +16,9 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::iter::{DoubleEndedIterator, FusedIterator};
 use std::str::FromStr;
+use std::vec::IntoIter;
 
 use reqwest::Url;
 use serde::de::Error as DeserError;
@@ -97,6 +99,87 @@ pub enum Root {
     MultipleVersions { versions: Vec<Version> },
     /// Single major version.
     OneVersion { version: Version },
+}
+
+#[derive(Debug)]
+enum IntoStableIterInner {
+    Many(IntoIter<Version>),
+    One(Option<Version>),
+}
+
+/// An iterator over stable versions.
+#[derive(Debug)]
+pub struct IntoStableIter(IntoStableIterInner);
+
+impl Iterator for IntoStableIter {
+    type Item = Version;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0 {
+            IntoStableIterInner::Many(ref mut inner) => {
+                for next in inner {
+                    if next.is_stable() {
+                        return Some(next);
+                    }
+                }
+
+                None
+            }
+            IntoStableIterInner::One(ref mut opt) => opt.take(),
+        }
+    }
+}
+
+impl DoubleEndedIterator for IntoStableIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self.0 {
+            IntoStableIterInner::Many(ref mut inner) => {
+                while let Some(next) = inner.next_back() {
+                    if next.is_stable() {
+                        return Some(next);
+                    }
+                }
+
+                None
+            }
+            IntoStableIterInner::One(ref mut opt) => opt.take(),
+        }
+    }
+}
+
+impl FusedIterator for IntoStableIter where {}
+
+impl Root {
+    /// Sort versions from lowest to highest (using unstable sorting).
+    #[inline]
+    pub fn sort(&mut self) {
+        if let Root::MultipleVersions {
+            versions: ref mut vers,
+        } = self
+        {
+            vers.sort_unstable();
+        }
+    }
+
+    /// Create a `Root` sorted with `sort`.
+    #[inline]
+    pub fn into_sorted(mut self) -> Self {
+        self.sort();
+        self
+    }
+
+    /// Create an iterator over stable versions.
+    pub fn into_stable_iter(self) -> IntoStableIter {
+        match self {
+            Root::MultipleVersions { versions: vers } => {
+                IntoStableIter(IntoStableIterInner::Many(vers.into_iter()))
+            }
+            Root::OneVersion { version: ver } => {
+                let stable = if ver.is_stable() { Some(ver) } else { None };
+                IntoStableIter(IntoStableIterInner::One(stable))
+            }
+        }
+    }
 }
 
 impl<T> fmt::Display for XdotY<T>
@@ -229,7 +312,7 @@ mod test {
     use serde::Deserialize;
     use serde_json;
 
-    use super::{deser_url, empty_as_default, Version, XdotY};
+    use super::{deser_url, empty_as_default, Root, Version, XdotY};
 
     #[derive(Debug, Deserialize)]
     struct Custom(bool);
@@ -376,5 +459,153 @@ mod test {
             min_version: None,
         };
         assert!(!unstable.is_stable());
+    }
+
+    #[test]
+    fn test_root_sort() {
+        let vers: Vec<_> = [3, 1, 2]
+            .into_iter()
+            .map(|idx| Version {
+                id: XdotY(*idx, 0),
+                links: Vec::new(),
+                status: None,
+                version: None,
+                min_version: None,
+            })
+            .collect();
+        let mut root = Root::MultipleVersions { versions: vers };
+        root.sort();
+        if let Root::MultipleVersions { versions: res } = root {
+            let idx = res.into_iter().map(|v| v.id.0).collect::<Vec<_>>();
+            assert_eq!(idx, vec![1, 2, 3]);
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn test_root_sort_one() {
+        let ver = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("supported".to_string()),
+            version: None,
+            min_version: None,
+        };
+        let mut root = Root::OneVersion { version: ver };
+        root.sort();
+        if let Root::OneVersion { version: res } = root {
+            assert_eq!(res.id.0, 2);
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn test_root_into_sorted() {
+        let vers: Vec<_> = [3, 1, 2]
+            .into_iter()
+            .map(|idx| Version {
+                id: XdotY(*idx, 0),
+                links: Vec::new(),
+                status: None,
+                version: None,
+                min_version: None,
+            })
+            .collect();
+        let mut root = Root::MultipleVersions { versions: vers };
+        root = root.into_sorted();
+        if let Root::MultipleVersions { versions: res } = root {
+            let idx = res.into_iter().map(|v| v.id.0).collect::<Vec<_>>();
+            assert_eq!(idx, vec![1, 2, 3]);
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn test_root_into_stable_iter() {
+        let vers: Vec<_> = [3, 1, 2]
+            .into_iter()
+            .map(|idx| Version {
+                id: XdotY(*idx, 0),
+                links: Vec::new(),
+                status: Some(if *idx > 1 { "CURRENT" } else { "DEPRECATED" }.to_string()),
+                version: None,
+                min_version: None,
+            })
+            .collect();
+        let root = Root::MultipleVersions { versions: vers };
+        let idx = root
+            .into_stable_iter()
+            .map(|ver| ver.id.0)
+            .collect::<Vec<_>>();
+        assert_eq!(idx, vec![3, 2]);
+    }
+
+    #[test]
+    fn test_root_into_stable_iter_reverse() {
+        let vers: Vec<_> = [3, 1, 2]
+            .into_iter()
+            .map(|idx| Version {
+                id: XdotY(*idx, 0),
+                links: Vec::new(),
+                status: Some(if *idx > 1 { "CURRENT" } else { "DEPRECATED" }.to_string()),
+                version: None,
+                min_version: None,
+            })
+            .collect();
+        let root = Root::MultipleVersions { versions: vers };
+        let mut idx = root.into_stable_iter().map(|ver| ver.id.0);
+        assert_eq!(idx.next_back(), Some(2));
+        assert_eq!(idx.next_back(), Some(3));
+        assert!(idx.next_back().is_none());
+        assert!(idx.next().is_none());
+    }
+
+    #[test]
+    fn test_root_into_stable_iter_one() {
+        let ver = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("supported".to_string()),
+            version: None,
+            min_version: None,
+        };
+        let root = Root::OneVersion { version: ver };
+        let idx = root
+            .into_stable_iter()
+            .map(|ver| ver.id.0)
+            .collect::<Vec<_>>();
+        assert_eq!(idx, vec![2]);
+    }
+
+    #[test]
+    fn test_root_into_stable_iter_one_unstable() {
+        let ver = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("deprecated".to_string()),
+            version: None,
+            min_version: None,
+        };
+        let root = Root::OneVersion { version: ver };
+        let mut idx = root.into_stable_iter().map(|ver| ver.id.0);
+        assert!(idx.next().is_none());
+    }
+
+    #[test]
+    fn test_root_into_stable_iter_one_reverse() {
+        let ver = Version {
+            id: XdotY(2, 0),
+            links: Vec::new(),
+            status: Some("supported".to_string()),
+            version: None,
+            min_version: None,
+        };
+        let root = Root::OneVersion { version: ver };
+        let mut idx = root.into_stable_iter().map(|ver| ver.id.0);
+        assert_eq!(idx.next_back(), Some(2));
+        assert!(idx.next_back().is_none());
     }
 }
