@@ -47,7 +47,7 @@ pub enum Identity {
     /// Authentication with a user and a password.
     Password(UserAndPassword),
     /// Authentication with a token.
-    Token(IdOrName),
+    Token(String),
 }
 
 /// A reference to a project in a domain.
@@ -131,7 +131,7 @@ struct PasswordAuth<'a> {
 
 #[derive(Debug, Serialize)]
 struct TokenAuth<'a> {
-    token: &'a IdOrName,
+    id: &'a str,
 }
 
 impl Serialize for Identity {
@@ -147,7 +147,7 @@ impl Serialize for Identity {
             }
             Identity::Token(ref token) => {
                 inner.serialize_field("methods", &["token"])?;
-                inner.serialize_field("token", &TokenAuth { token })?;
+                inner.serialize_field("token", &TokenAuth { id: token })?;
             }
         }
         inner.end()
@@ -165,9 +165,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use super::super::common::test;
     use super::*;
-
-    use serde_json;
 
     const PASSWORD_NAME_UNSCOPED: &str = r#"
 {
@@ -233,9 +232,27 @@ mod test {
     }
 }"#;
 
+    const TOKEN_SCOPED_WITH_NAME: &str = r#"
+{
+    "auth": {
+        "identity": {
+            "methods": [
+                "token"
+            ],
+            "token": {
+                "id": "abcdef"
+            }
+        },
+        "scope": {
+            "domain": {
+                "name": "Default"
+            }
+        }
+    }
+}"#;
+
     #[test]
     fn test_password_name_unscoped() {
-        let sample: serde_json::Value = serde_json::from_str(PASSWORD_NAME_UNSCOPED).unwrap();
         let value = AuthRoot {
             auth: Auth {
                 identity: Identity::Password(UserAndPassword {
@@ -246,13 +263,11 @@ mod test {
                 scope: None,
             },
         };
-        let result = serde_json::to_value(value).unwrap();
-        assert_eq!(result, sample);
+        test::compare(PASSWORD_NAME_UNSCOPED, value);
     }
 
     #[test]
     fn test_password_id_scoped_with_id() {
-        let sample: serde_json::Value = serde_json::from_str(PASSWORD_ID_SCOPED_WITH_ID).unwrap();
         let value = AuthRoot {
             auth: Auth {
                 identity: Identity::Password(UserAndPassword {
@@ -263,13 +278,11 @@ mod test {
                 scope: Some(Scope::Domain(IdOrName::Id("default".to_string()))),
             },
         };
-        let result = serde_json::to_value(value).unwrap();
-        assert_eq!(result, sample);
+        test::compare(PASSWORD_ID_SCOPED_WITH_ID, value);
     }
 
     #[test]
     fn test_password_id_system_scope() {
-        let sample: serde_json::Value = serde_json::from_str(PASSWORD_ID_SYSTEM_SCOPE).unwrap();
         let value = AuthRoot {
             auth: Auth {
                 identity: Identity::Password(UserAndPassword {
@@ -280,7 +293,17 @@ mod test {
                 scope: Some(Scope::System),
             },
         };
-        let result = serde_json::to_value(value).unwrap();
-        assert_eq!(result, sample);
+        test::compare(PASSWORD_ID_SYSTEM_SCOPE, value);
+    }
+
+    #[test]
+    fn test_token_scoped_with_name() {
+        let value = AuthRoot {
+            auth: Auth {
+                identity: Identity::Token("abcdef".to_string()),
+                scope: Some(Scope::Domain(IdOrName::Name("Default".to_string()))),
+            },
+        };
+        test::compare(TOKEN_SCOPED_WITH_NAME, value);
     }
 }

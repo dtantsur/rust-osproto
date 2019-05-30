@@ -305,14 +305,20 @@ where
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use std::str::FromStr;
 
     use reqwest::Url;
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use serde_json;
 
     use super::{deser_url, empty_as_default, Root, Version, XdotY};
+
+    pub fn compare<T: Serialize>(sample: &str, value: T) {
+        let converted: serde_json::Value = serde_json::from_str(sample).unwrap();
+        let result = serde_json::to_value(value).unwrap();
+        assert_eq!(result, converted);
+    }
 
     #[derive(Debug, Deserialize)]
     struct Custom(bool);
