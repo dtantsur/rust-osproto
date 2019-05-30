@@ -20,14 +20,14 @@ use std::iter::{DoubleEndedIterator, FusedIterator};
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use reqwest::Url;
 use serde::de::Error as DeserError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use url::Url;
 
 /// A link to a resource.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Link {
-    #[serde(deserialize_with = "deser_url")]
+    #[serde(with = "url_serde")]
     pub href: Url,
     pub rel: String,
 }
@@ -296,23 +296,14 @@ where
     }
 }
 
-/// Deserialize a URL.
-pub fn deser_url<'de, D>(des: D) -> Result<Url, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    Url::parse(&String::deserialize(des)?).map_err(DeserError::custom)
-}
-
 #[cfg(test)]
 pub mod test {
     use std::str::FromStr;
 
-    use reqwest::Url;
     use serde::{Deserialize, Serialize};
     use serde_json;
 
-    use super::{deser_url, empty_as_default, Root, Version, XdotY};
+    use super::{empty_as_default, Root, Version, XdotY};
 
     pub fn compare<T: Serialize>(sample: &str, value: T) {
         let converted: serde_json::Value = serde_json::from_str(sample).unwrap();
@@ -333,12 +324,6 @@ pub mod test {
         opt: Option<Custom>,
     }
 
-    #[derive(Debug, Deserialize)]
-    struct DeserUrl {
-        #[serde(deserialize_with = "deser_url")]
-        url: Url,
-    }
-
     #[test]
     fn test_empty_as_default_with_values() {
         let s = "{\"number\": 42, \"vec\": [\"value\"], \"opt\": true}";
@@ -355,13 +340,6 @@ pub mod test {
         assert_eq!(r.number, 0);
         assert!(r.vec.is_empty());
         assert!(r.opt.is_none());
-    }
-
-    #[test]
-    fn test_deser_url() {
-        let s = "{\"url\": \"https://127.0.0.1/path\"}";
-        let r: DeserUrl = serde_json::from_str(s).unwrap();
-        assert_eq!(r.url.as_str(), "https://127.0.0.1/path");
     }
 
     #[test]
