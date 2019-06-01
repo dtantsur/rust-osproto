@@ -40,7 +40,7 @@ pub struct IdAndName {
 }
 
 /// A pair `X.Y` where `X` and `Y` can be converted to/from a string and `Y` is optional.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct XdotY<T>(pub T, pub T);
 
 /// A single API version as returned by a version discovery endpoint.
@@ -188,6 +188,15 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}.{}", self.0, self.1)
+    }
+}
+
+impl<T> fmt::Debug for XdotY<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("").field(&self.0).field(&self.1).finish()
     }
 }
 
@@ -340,6 +349,15 @@ pub mod test {
         assert_eq!(r.number, 0);
         assert!(r.vec.is_empty());
         assert!(r.opt.is_none());
+    }
+
+    #[test]
+    fn test_xdoty_debug() {
+        let xy = XdotY(1, 2);
+        let s = format!("{:?}", xy);
+        assert_eq!(s, "(1, 2)");
+        let s2 = format!("{:?}", (1, 2));
+        assert_eq!(s, s2);
     }
 
     #[test]
