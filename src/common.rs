@@ -44,7 +44,7 @@ pub struct IdAndName {
 pub struct XdotY<T>(pub T, pub T);
 
 /// A single API version as returned by a version discovery endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Version {
     #[serde(deserialize_with = "deser_version")]
     pub id: XdotY<u16>,
@@ -92,7 +92,7 @@ impl Ord for Version {
 }
 
 /// A result of a version discovery endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Root {
     /// Multiple major versions.
@@ -101,7 +101,7 @@ pub enum Root {
     OneVersion { version: Version },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum IntoStableIterInner {
     Many(IntoIter<Version>),
     One(Option<Version>),
