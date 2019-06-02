@@ -260,6 +260,12 @@ where
     }
 }
 
+impl<T> From<(T, T)> for XdotY<T> {
+    fn from(value: (T, T)) -> XdotY<T> {
+        XdotY(value.0, value.1)
+    }
+}
+
 fn deser_version<'de, D, T>(des: D) -> Result<XdotY<T>, D::Error>
 where
     D: Deserializer<'de>,
