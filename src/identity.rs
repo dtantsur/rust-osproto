@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use super::common::IdAndName;
 
 /// A reference to a resource by its ID or name.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, Hash)]
 pub enum IdOrName {
     /// Resource ID.
     #[serde(rename = "id")]
