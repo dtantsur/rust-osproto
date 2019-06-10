@@ -32,6 +32,12 @@ pub struct Link {
     pub rel: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct Ref {
+    pub id: String,
+    pub links: Vec<Link>,
+}
+
 /// A reference to an ID and name.
 #[derive(Clone, Debug, Deserialize)]
 pub struct IdAndName {
