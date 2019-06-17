@@ -53,7 +53,6 @@ pub struct XdotY<T>(pub T, pub T);
 /// A single API version as returned by a version discovery endpoint.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Version {
-    #[serde(deserialize_with = "deser_version")]
     pub id: XdotY<u16>,
     #[serde(default)]
     pub links: Vec<Link>,
@@ -262,8 +261,13 @@ where
     where
         D: Deserializer<'de>,
     {
-        let value: &str = Deserialize::deserialize(deserializer)?;
-        XdotY::from_str(value).map_err(D::Error::custom)
+        let value: String = Deserialize::deserialize(deserializer)?;
+        let version_part = if value.starts_with('v') {
+            &value[1..]
+        } else {
+            &value
+        };
+        XdotY::from_str(&version_part).map_err(D::Error::custom)
     }
 }
 
@@ -271,26 +275,6 @@ impl<T> From<(T, T)> for XdotY<T> {
     fn from(value: (T, T)) -> XdotY<T> {
         XdotY(value.0, value.1)
     }
-}
-
-fn deser_version<'de, D, T>(des: D) -> Result<XdotY<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr + Default,
-    T::Err: fmt::Display,
-{
-    let value: &str = Deserialize::deserialize(des)?;
-    if value.is_empty() {
-        return Err(D::Error::custom("Empty version ID"));
-    }
-
-    let version_part = if value.starts_with('v') {
-        &value[1..]
-    } else {
-        &value
-    };
-
-    XdotY::from_str(version_part).map_err(D::Error::custom)
 }
 
 /// Deserialize a value where empty string is replaced by `Default` value.
@@ -401,11 +385,34 @@ pub mod test {
         assert_eq!(&ser, "\"2.27\"");
     }
 
+    #[derive(Debug, Deserialize)]
+    struct Struct {
+        pub req: XdotY<u16>,
+        pub opt: Option<XdotY<u16>>,
+    }
+
     #[test]
     fn test_xdoty_serde_deserialize() {
         let xy: XdotY<u8> = serde_json::from_str("\"2.27\"").unwrap();
-        assert_eq!(xy.0, 2);
-        assert_eq!(xy.1, 27);
+        assert_eq!(xy, XdotY(2, 27));
+        let xy2: XdotY<u16> =
+            serde_json::from_value(serde_json::Value::String("2.27".to_string())).unwrap();
+        assert_eq!(xy2, XdotY(2, 27));
+        let st: Struct = serde_json::from_str("{\"req\": \"2.27\", \"opt\": \"2.42\"}").unwrap();
+        assert_eq!(st.req, XdotY(2, 27));
+        assert_eq!(st.opt.unwrap(), XdotY(2, 42));
+    }
+
+    #[test]
+    fn test_xdoty_serde_deserialize_with_v() {
+        let xy: XdotY<u8> = serde_json::from_str("\"v2.27\"").unwrap();
+        assert_eq!(xy, XdotY(2, 27));
+        let xy2: XdotY<u16> =
+            serde_json::from_value(serde_json::Value::String("v2.27".to_string())).unwrap();
+        assert_eq!(xy2, XdotY(2, 27));
+        let st: Struct = serde_json::from_str("{\"req\": \"v2.27\", \"opt\": \"v2.42\"}").unwrap();
+        assert_eq!(st.req, XdotY(2, 27));
+        assert_eq!(st.opt.unwrap(), XdotY(2, 42));
     }
 
     #[test]
@@ -614,5 +621,43 @@ pub mod test {
         let mut idx = root.into_stable_iter().map(|ver| ver.id.0);
         assert_eq!(idx.next_back(), Some(2));
         assert!(idx.next_back().is_none());
+    }
+
+    const COMPUTE_ONE: &str = r#"{
+  "version": {
+    "status": "CURRENT",
+    "updated": "2013-07-23T11:33:21Z",
+    "links": [
+      {
+        "href": "https://example.org:13774/v2.1/",
+        "rel": "self"
+      },
+      {
+        "href": "http://docs.openstack.org/",
+        "type": "text/html",
+        "rel": "describedby"
+      }
+    ],
+    "min_version": "2.1",
+    "version": "2.42",
+    "media-types": [
+      {
+        "base": "application/json",
+        "type": "application/vnd.openstack.compute+json;version=2.1"
+      }
+    ],
+    "id": "v2.1"
+  }
+}"#;
+
+    #[test]
+    fn test_parse_root_one_version() {
+        let root: Root = serde_json::from_str(COMPUTE_ONE).unwrap();
+        match root {
+            Root::OneVersion { version } => {
+                assert_eq!(version.id, XdotY(2, 1));
+            }
+            Root::MultipleVersions { .. } => panic!("Unexpected multiple versions"),
+        }
     }
 }
