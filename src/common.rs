@@ -20,8 +20,9 @@ use std::iter::{DoubleEndedIterator, FusedIterator};
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use serde::de::Error as DeserError;
+use serde::de::{DeserializeOwned, Error as DeserError};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 use url::Url;
 
 /// A link to a resource.
@@ -292,28 +293,16 @@ where
     XdotY::from_str(version_part).map_err(D::Error::custom)
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ValueOrString<'s, T> {
-    Value(T),
-    String(&'s str),
-}
-
 /// Deserialize a value where empty string is replaced by `Default` value.
 pub fn empty_as_default<'de, D, T>(des: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
-    T: Deserialize<'de> + Default,
+    T: DeserializeOwned + Default,
 {
-    match ValueOrString::deserialize(des)? {
-        ValueOrString::Value(val) => Ok(val),
-        ValueOrString::String(val) => {
-            if val == "" {
-                Ok(T::default())
-            } else {
-                Err(DeserError::custom("Unexpected non-empty string"))
-            }
-        }
+    let value = Value::deserialize(des)?;
+    match value {
+        Value::String(ref s) if s.is_empty() => Ok(T::default()),
+        _ => serde_json::from_value(value).map_err(D::Error::custom),
     }
 }
 
@@ -343,24 +332,28 @@ pub mod test {
         vec: Vec<String>,
         #[serde(deserialize_with = "empty_as_default")]
         opt: Option<Custom>,
+        #[serde(deserialize_with = "empty_as_default")]
+        string: Option<String>,
     }
 
     #[test]
     fn test_empty_as_default_with_values() {
-        let s = "{\"number\": 42, \"vec\": [\"value\"], \"opt\": true}";
+        let s = "{\"number\": 42, \"vec\": [\"value\"], \"opt\": true, \"string\": \"value\"}";
         let r: EmptyAsDefault = serde_json::from_str(s).unwrap();
         assert_eq!(r.number, 42);
         assert_eq!(r.vec, vec!["value".to_string()]);
         assert!(r.opt.unwrap().0);
+        assert_eq!(r.string.unwrap(), "value");
     }
 
     #[test]
     fn test_empty_as_default_with_empty_string() {
-        let s = "{\"number\": \"\", \"vec\": \"\", \"opt\": \"\"}";
+        let s = "{\"number\": \"\", \"vec\": \"\", \"opt\": \"\", \"string\": \"\"}";
         let r: EmptyAsDefault = serde_json::from_str(s).unwrap();
         assert_eq!(r.number, 0);
         assert!(r.vec.is_empty());
         assert!(r.opt.is_none());
+        assert!(r.string.is_none());
     }
 
     #[test]
