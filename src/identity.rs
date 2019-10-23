@@ -134,6 +134,33 @@ struct TokenAuth<'a> {
     id: &'a str,
 }
 
+// We now check if the string is an Id or Name
+fn is_id(s: &str) -> bool {
+    // example id: 213a290c-ae17-4841-9609-badc01b4ea5c
+    // numbercount:012345678901234567890123456789012345
+    let lens = vec![8, 4, 4, 4, 12];
+    if s.chars().count() != 36 {
+        return false;
+    }
+    s.split('-')
+        .zip(lens)
+        .all(|(s, len)| s.chars().count() == len && s.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+impl<T> From<T> for IdOrName
+where
+    T: Into<String>,
+{
+    fn from(s: T) -> Self {
+        let unknown = s.into();
+        if is_id(&unknown) {
+            Self::Id(unknown)
+        } else {
+            Self::Name(unknown)
+        }
+    }
+}
+
 impl Serialize for Identity {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -305,5 +332,25 @@ mod test {
             },
         };
         test::compare(TOKEN_SCOPED_WITH_NAME, value);
+    }
+    #[test]
+    fn test_id_or_name_from_str() {
+        assert_eq!(
+            IdOrName::Id("213a290c-ae17-4841-9609-badc01b4ea5c".to_string()),
+            IdOrName::from("213a290c-ae17-4841-9609-badc01b4ea5c")
+        );
+        assert_eq!(
+            IdOrName::Id("213a290c-ae17-4841-9609-ffffffffffff".to_string()), // check for overflow
+            IdOrName::from("213a290c-ae17-4841-9609-ffffffffffff")
+        );
+        assert_eq!(
+            IdOrName::Name("213a290c-ae17-4841-9609-gggggggggggg".to_string()), // check for outside hex
+            IdOrName::from("213a290c-ae17-4841-9609-gggggggggggg")
+        );
+        assert_eq!(
+            IdOrName::Name("213a290c-ae17-4841-9609-fffffffffffff".to_string()), // check for to_long_sting
+            IdOrName::from("213a290c-ae17-4841-9609-fffffffffffff")
+        );
+        assert_eq!(IdOrName::Name("Hello".to_string()), IdOrName::from("Hello"))
     }
 }
