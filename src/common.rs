@@ -153,7 +153,7 @@ impl DoubleEndedIterator for IntoStableIter {
     }
 }
 
-impl FusedIterator for IntoStableIter where {}
+impl FusedIterator for IntoStableIter {}
 
 impl Root {
     /// Sort versions from lowest to highest (using unstable sorting).
