@@ -28,7 +28,6 @@ use url::Url;
 /// A link to a resource.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct Link {
-    #[serde(with = "url_serde")]
     pub href: Url,
     pub rel: String,
 }
