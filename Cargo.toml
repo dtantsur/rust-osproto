@@ -2,7 +2,7 @@
 
 name = "osproto"
 description = "Protocol structures for OpenStack API"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Dmitry Tantsur <divius.inside@gmail.com>"]
 homepage = "https://github.com/dtantsur/rust-osproto"
 repository = "https://github.com/dtantsur/rust-osproto"
