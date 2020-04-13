@@ -134,6 +134,20 @@ struct TokenAuth<'a> {
     id: &'a str,
 }
 
+impl IdOrName {
+    /// Create an ID from anything that can be converted to a string.
+    #[inline]
+    pub fn from_id<T: Into<String>>(id: T) -> IdOrName {
+        IdOrName::Id(id.into())
+    }
+
+    /// Create a name from anything that can be converted to a string.
+    #[inline]
+    pub fn from_name<T: Into<String>>(name: T) -> IdOrName {
+        IdOrName::Name(name.into())
+    }
+}
+
 impl Serialize for Identity {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -258,7 +272,7 @@ mod test {
                 identity: Identity::Password(UserAndPassword {
                     user: IdOrName::Name("admin".to_string()),
                     password: "devstacker".to_string(),
-                    domain: Some(IdOrName::Name("Default".to_string())),
+                    domain: Some(IdOrName::from_name("Default")),
                 }),
                 scope: None,
             },
@@ -275,7 +289,7 @@ mod test {
                     password: "devstacker".to_string(),
                     domain: None,
                 }),
-                scope: Some(Scope::Domain(IdOrName::Id("default".to_string()))),
+                scope: Some(Scope::Domain(IdOrName::from_id("default"))),
             },
         };
         test::compare(PASSWORD_ID_SCOPED_WITH_ID, value);
