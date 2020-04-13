@@ -477,7 +477,7 @@ pub mod test {
     #[test]
     fn test_root_sort() {
         let vers: Vec<_> = [3, 1, 2]
-            .into_iter()
+            .iter()
             .map(|idx| Version {
                 id: XdotY(*idx, 0),
                 links: Vec::new(),
@@ -517,7 +517,7 @@ pub mod test {
     #[test]
     fn test_root_into_sorted() {
         let vers: Vec<_> = [3, 1, 2]
-            .into_iter()
+            .iter()
             .map(|idx| Version {
                 id: XdotY(*idx, 0),
                 links: Vec::new(),
@@ -539,7 +539,7 @@ pub mod test {
     #[test]
     fn test_root_into_stable_iter() {
         let vers: Vec<_> = [3, 1, 2]
-            .into_iter()
+            .iter()
             .map(|idx| Version {
                 id: XdotY(*idx, 0),
                 links: Vec::new(),
@@ -559,7 +559,7 @@ pub mod test {
     #[test]
     fn test_root_into_stable_iter_reverse() {
         let vers: Vec<_> = [3, 1, 2]
-            .into_iter()
+            .iter()
             .map(|idx| Version {
                 id: XdotY(*idx, 0),
                 links: Vec::new(),
