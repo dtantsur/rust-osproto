@@ -1,9 +1,9 @@
 [package]
 
 name = "osproto"
-description = "Protocol structures for OpenStack API"
-version = "0.2.1"
-authors = ["Dmitry Tantsur <divius.inside@gmail.com>"]
+description = "Protocol structures for OpenStack API (Obsolete)"
+version = "0.2.2"
+authors = ["Dmitry Tantsur <dtantsur@protonmail.com>"]
 homepage = "https://github.com/dtantsur/rust-osproto"
 repository = "https://github.com/dtantsur/rust-osproto"
 documentation = "https://docs.rs/osproto"
